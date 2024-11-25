@@ -17,13 +17,18 @@ El proyecto está compuesto por los siguientes archivos principales:
 ## Requisitos
 Antes de ejecutar los scripts, asegúrate de tener instaladas las siguientes dependencias:
 ```bash
-pip install mediapipe opencv-python numpy pandas matplotlib scikit-learn seaborn pillow xgboost
+pip install mediapipe opencv-python numpy pandas matplotlib scikit-learn seaborn pillow xgboost optuna
 ```
 
 
 ## Guía de Uso
 ## Recolección de Datos
 Para recolectar datos de poses, ejecuta el script RecoleccionDatos.py. Este script abrirá una interfaz gráfica que te permitirá grabar diferentes actividades utilizando una cámara web.
+
+
+```bash
+python RecoleccionDatos.py 
+```
 
 - Selecciona la actividad que deseas grabar en el selector de actividades.
 - Haz clic en Iniciar Grabación para comenzar a grabar.
