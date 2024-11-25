@@ -4,7 +4,7 @@ from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.ensemble import RandomForestClassifier
 import xgboost as xgb
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
@@ -18,8 +18,9 @@ class ModelTrainer:
         self.label_encoder = LabelEncoder()
         self.model_params_file = 'model_params.json'
         self.model_file = 'pose_model.pkl'
+        self.feature_names = None
         
-    def load_data(self, filename='pose_data.csv'):
+    def load_data(self, filename='pose_data_anga.csv'):
         """Carga datos del archivo CSV."""
         try:
             df = pd.read_csv(filename)
@@ -89,6 +90,7 @@ class ModelTrainer:
             
         # Preparar características
         feature_columns = [col for col in df.columns if col not in ['timestamp', 'activity']]
+        self.feature_names = feature_columns
         X = df[feature_columns].values
         y = self.label_encoder.fit_transform(df['activity'].values)
         
@@ -122,47 +124,80 @@ class ModelTrainer:
         
         # Evaluar modelo
         y_pred = self.model.predict(X_test_scaled)
-        accuracy = accuracy_score(y_test, y_pred)
         
         # Convertir predicciones numéricas a etiquetas
         y_test_labels = self.label_encoder.inverse_transform(y_test)
         y_pred_labels = self.label_encoder.inverse_transform(y_pred)
         
-        print("\nInforme de clasificación:")
-        print(classification_report(y_test_labels, y_pred_labels))
-        print(f"\nPrecisión final: {accuracy:.4f}")
-        
-        # Guardar modelo
-        self.save_model()
-        
-        return accuracy, y_test_labels, y_pred_labels
+        return X_test_scaled, y_test, y_pred, y_test_labels, y_pred_labels
     
     def save_model(self):
         """Guarda el modelo entrenado."""
         with open(self.model_file, 'wb') as f:
             pickle.dump((self.model, self.scaler, self.label_encoder), f)
             
-    def analyze_results(self, y_test, y_pred):
+    def analyze_results(self, y_test, y_pred, y_test_labels, y_pred_labels):
         """Analiza y visualiza los resultados del modelo."""
         # Crear directorio para resultados
         Path("analysis_results").mkdir(exist_ok=True)
         
-        # Matriz de confusión
-        plt.figure(figsize=(10, 8))
-        sns.heatmap(
-            pd.crosstab(y_test, y_pred),
-            annot=True,
-            fmt='d',
-            cmap='Blues'
-        )
-        plt.title('Matriz de Confusión')
+        # 1. Métricas generales
+        accuracy = accuracy_score(y_test, y_pred)
+        class_report = classification_report(y_test_labels, y_pred_labels, output_dict=True)
+        
+        # Convertir el reporte de clasificación a DataFrame para mejor visualización
+        report_df = pd.DataFrame(class_report).transpose()
+        
+        # Guardar métricas en un archivo
+        report_df.to_csv('analysis_results/classification_metrics.csv')
+        
+        print("\nMétricas de Evaluación:")
+        print(f"Accuracy: {accuracy:.4f}")
+        print("\nInforme detallado por clase:")
+        print(classification_report(y_test_labels, y_pred_labels))
+        
+        # 2. Matriz de confusión con valores normalizados y sin normalizar
+        plt.figure(figsize=(16, 6))
+        
+        # Matriz sin normalizar
+        plt.subplot(1, 2, 1)
+        cm = confusion_matrix(y_test_labels, y_pred_labels)
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+        plt.title('Matriz de Confusión (valores absolutos)')
         plt.xlabel('Predicción')
         plt.ylabel('Real')
+        
+        # Matriz normalizada
+        plt.subplot(1, 2, 2)
+        cm_norm = confusion_matrix(y_test_labels, y_pred_labels, normalize='true')
+        sns.heatmap(cm_norm, annot=True, fmt='.2f', cmap='Blues')
+        plt.title('Matriz de Confusión (normalizada)')
+        plt.xlabel('Predicción')
+        plt.ylabel('Real')
+        
         plt.tight_layout()
-        plt.savefig('analysis_results/confusion_matrix.png')
+        plt.savefig('analysis_results/confusion_matrices.png')
         plt.close()
         
-        # Importancia de características (solo para Random Forest)
+        # 3. Gráfico de barras para Precision, Recall y F1-score por clase
+        metrics_df = pd.DataFrame({
+            'Precision': [class_report[cls]['precision'] for cls in class_report if cls not in ['accuracy', 'macro avg', 'weighted avg']],
+            'Recall': [class_report[cls]['recall'] for cls in class_report if cls not in ['accuracy', 'macro avg', 'weighted avg']],
+            'F1-score': [class_report[cls]['f1-score'] for cls in class_report if cls not in ['accuracy', 'macro avg', 'weighted avg']]
+        }, index=[cls for cls in class_report if cls not in ['accuracy', 'macro avg', 'weighted avg']])
+        
+        plt.figure(figsize=(12, 6))
+        metrics_df.plot(kind='bar', width=0.8)
+        plt.title('Métricas por Clase')
+        plt.xlabel('Clase')
+        plt.ylabel('Valor')
+        plt.legend(loc='lower right')
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        plt.savefig('analysis_results/metrics_by_class.png')
+        plt.close()
+        
+        # 4. Importancia de características (solo para Random Forest)
         if isinstance(self.model, RandomForestClassifier):
             feature_importance = pd.DataFrame({
                 'feature': self.feature_names,
@@ -181,8 +216,9 @@ class ModelTrainer:
 
 def main():
     trainer = ModelTrainer()
-    accuracy, y_test, y_pred = trainer.train_model(force_optimization=True)
-    trainer.analyze_results(y_test, y_pred)
+    X_test_scaled, y_test, y_pred, y_test_labels, y_pred_labels = trainer.train_model(force_optimization=True)
+    trainer.analyze_results(y_test, y_pred, y_test_labels, y_pred_labels)
+    trainer.save_model()
 
 if __name__ == "__main__":
     main()

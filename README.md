@@ -17,7 +17,7 @@ El proyecto está compuesto por los siguientes archivos principales:
 ## Requisitos
 Antes de ejecutar los scripts, asegúrate de tener instaladas las siguientes dependencias:
 ```bash
-pip install -r requirements.txt
+pip install mediapipe opencv-python numpy pandas matplotlib scikit-learn seaborn pillow xgboost
 ```
 
 
